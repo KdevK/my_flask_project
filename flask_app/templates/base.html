@@ -19,10 +19,19 @@
 <a href="{{ url_for(m.url) }}">{{ m.title }}</a>
 {% endfor %}
 
-<a href="{{ url_for('profile', username='sagit')}}">User Sagit</a>
+
 
 {% block content %}
 {% endblock %}
+
+
+<script>
+    document.cookie = 'ex=1;';
+    if (!document.cookie) {
+        alert('Для этого сайта нужны cookie')
+    }
+</script>
+
 
 </body>
 </html>

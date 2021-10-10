@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS mainmenu (
 
 CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL UNIQUE,
-    content TEXT NOT NULL,
-    pub_date INTEGER NOT NULL
+    title text NOT NULL UNIQUE,
+    content text NOT NULL,
+    photo BLOB DEFAULT NULL,
+    pub_date integer NOT NULL
 );

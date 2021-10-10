@@ -2,9 +2,11 @@ import datetime
 import os
 import sqlite3
 
-from flask import Flask, render_template, url_for, request, flash, get_flashed_messages, g, abort
+from flask import Flask, render_template, url_for, request, flash, get_flashed_messages, g, abort, make_response, \
+    redirect, session
 
 from flask_app.flask_database import FlaskDataBase
+from werkzeug.security import generate_password_hash, check_password_hash
 
 DATABASE = 'flaskapp.db'
 DEBUG = True
@@ -13,6 +15,7 @@ SECRET_KEY = 'gheghgj3qhgt4q$#^#$he'
 app = Flask(__name__)
 app.config.from_object(__name__)
 app.config.update(dict(DATABASE=os.path.join(app.root_path, 'flaskapp.db')))
+app.permanent_session_lifetime = datetime.timedelta(days=1)
 
 
 def create_db():
@@ -43,9 +46,35 @@ url_menu_items = {
 }
 
 
+@app.before_first_request
+def before_first_request():
+    print('BEFORE FIRST REQUEST')
+
+
+fdb = None
+
+
+@app.before_request
+def before_request_func():
+    global fdb
+    fdb = FlaskDataBase(get_db())
+    print('BEFORE REQUEST')
+
+
+@app.after_request
+def after_request_func(response):
+    print('AFTER REQUEST called')
+    return response
+
+
+@app.teardown_request
+def teardown_request_func(response):
+    print('TEARDOWN REQUEST called!')
+    return response
+
+
 @app.route('/')
 def index():
-    fdb = FlaskDataBase(get_db())
     return render_template(
         'index.html',
         menu_url=fdb.get_menu(),
@@ -55,7 +84,6 @@ def index():
 
 @app.route('/page2')
 def second():
-    fdb = FlaskDataBase(get_db())
 
     print(url_for('second'))
     print(url_for('index'))
@@ -77,7 +105,6 @@ def profile(username):
 
 @app.route('/add_post', methods=["GET", "POST"])
 def add_post():
-    fdb = FlaskDataBase(get_db())
 
     if request.method == "POST":
         name = request.form["name"]
@@ -96,7 +123,6 @@ def add_post():
 
 @app.route('/post/<int:post_id>')
 def post_content(post_id):
-    fdb = FlaskDataBase(get_db())
     title, content = fdb.get_post_content(post_id)
     if not title:
         abort(404)
@@ -105,7 +131,6 @@ def post_content(post_id):
 
 @app.route('/login', methods=['POST', 'GET'])
 def login():
-    fdb = FlaskDataBase(get_db())
     if request.method == 'GET':
         return render_template('login.html', menu_url=fdb.get_menu())
     elif request.method == 'POST':
@@ -121,7 +146,7 @@ def login():
 
         print(request)
         print(get_flashed_messages(True))
-        return render_template('login.html', menu_url=fdb.get_menu())
+        return render_template('login.html', menu_url=url_menu_items)
     else:
         raise Exception(f'Method {request.method} not allowed')
 
@@ -136,6 +161,72 @@ def close_db(error):
     """Close database connection if it exists."""
     if hasattr(g, 'link_db'):
         g.link_db.close()
+
+
+@app.route('/test_response1')
+def test_response():
+    content = render_template(
+        'index.html',
+        menu_url=fdb.get_menu(),
+        posts=fdb.get_posts()
+    )
+    response_obj = make_response(content)
+    return response_obj
+
+
+@app.route('/redirect')
+def redirect_example():
+    return redirect(url_for('index')), 301
+
+
+@app.route('/test_login')
+def test_login():
+    log = ''
+    if request.cookies.get('visited'):
+        log = request.cookies.get('visited')
+    response = make_response(f'<h1>Visited cookie: {log}</h1>')
+    response.set_cookie('visited', 'yes', 3)
+    return response
+
+
+@app.route('/session_example')
+def session_example():
+    if 'visits' in session:
+        session['visits'] += 1
+    else:
+        session['visits'] = 1
+
+    return f'<h1>Number of visits: {session["visits"]}</h1>'
+
+
+@app.route('/session_example2')
+def session_example2():
+    counter = session.get('visits', 1)
+    session['visits'] = counter + 1
+
+    return f'<h1>Number of visits: {session["visits"]}</h1>'
+
+
+data = [1, 2, 3]
+
+
+@app.route('/session_example3')
+def session_example3():
+    if 'data' not in session:
+        session['data'] = data
+    else:
+        session['data'][0] += 1
+        session.modified = True
+    return f'<h1>Data: {session["data"]}</h1>'
+
+
+@app.route('/hash_example')
+def hash_example():
+    password = 'Password1'
+    hash = generate_password_hash(password)
+
+    print(check_password_hash(hash, 'Password1'))
+    return f'<h1>Hash: {hash}</h1>'
 
 
 if __name__ == '__main__':
