@@ -11,3 +11,11 @@ CREATE TABLE IF NOT EXISTS posts (
     photo BLOB DEFAULT NULL,
     pub_date integer NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    password TEXT NOT NULL,
+    time INTEGER NOT NULL
+);

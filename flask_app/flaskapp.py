@@ -5,6 +5,9 @@ import sqlite3
 from flask import Flask, render_template, url_for, request, flash, get_flashed_messages, g, abort, make_response, \
     redirect, session
 
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from UserLogin import UserLogin
+
 from flask_app.flask_database import FlaskDataBase
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -16,6 +19,17 @@ app = Flask(__name__)
 app.config.from_object(__name__)
 app.config.update(dict(DATABASE=os.path.join(app.root_path, 'flaskapp.db')))
 app.permanent_session_lifetime = datetime.timedelta(days=1)
+
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Авторизируйтесь для доступа к закрытым страница'
+login_manager.login_message_category = 'success'
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    print('load user')
+    return UserLogin().fromDB(user_id, fdb)
 
 
 def create_db():
@@ -84,7 +98,6 @@ def index():
 
 @app.route('/page2')
 def second():
-
     print(url_for('second'))
     print(url_for('index'))
 
@@ -97,15 +110,15 @@ def second():
     )
 
 
-# int, float, path
-@app.route('/user/<username>')
-def profile(username):
-    return f"<h1>Hello {username}!</h1>"
+# # int, float, path
+# @app.route('/user/<username>')
+# def profile(username):
+#     return f"<h1>Hello {username}!</h1>"
 
 
 @app.route('/add_post', methods=["GET", "POST"])
+@login_required
 def add_post():
-
     if request.method == "POST":
         name = request.form["name"]
         post_content = request.form["post"]
@@ -122,6 +135,7 @@ def add_post():
 
 
 @app.route('/post/<int:post_id>')
+@login_required
 def post_content(post_id):
     title, content = fdb.get_post_content(post_id)
     if not title:
@@ -129,26 +143,63 @@ def post_content(post_id):
     return render_template('post.html', menu_url=fdb.get_menu(), title=title, content=content)
 
 
+# @app.route('/login', methods=['POST', 'GET'])
+# def login():
+#     if request.method == 'GET':
+#         return render_template('login.html', menu_url=fdb.get_menu())
+#     elif request.method == 'POST':
+#         email = request.form.get('email')
+#         password = request.form.get('password')
+#         if not email:
+#             flash('Email не указан!', category='unfilled_error')
+#         else:
+#             if '@' not in email or '.' not in email:
+#                 flash('Некорректный email!', category='validation_error')
+#         if not password:
+#             flash('Пароль не указан!', category='unfilled_error')
+#
+#         print(request)
+#         print(get_flashed_messages(True))
+#         return render_template('login.html', menu_url=fdb.get_menu())
+#     else:
+#         raise Exception(f'Method {request.method} not allowed')
+
+
 @app.route('/login', methods=['POST', 'GET'])
 def login():
-    if request.method == 'GET':
-        return render_template('login.html', menu_url=fdb.get_menu())
-    elif request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        if not email:
-            flash('Email не указан!', category='unfilled_error')
-        else:
-            if '@' not in email or '.' not in email:
-                flash('Некорректный email!', category='validation_error')
-        if not password:
-            flash('Пароль не указан!', category='unfilled_error')
+    if current_user.is_authenticated:
+        return redirect(url_for('profile'))
 
-        print(request)
-        print(get_flashed_messages(True))
-        return render_template('login.html', menu_url=url_menu_items)
-    else:
-        raise Exception(f'Method {request.method} not allowed')
+    if request.method == 'POST':
+        print(request.form['email'])
+        user = fdb.get_user_by_email(request.form['email'])
+        if user and check_password_hash(user['password'], request.form['password']):
+            userlogin = UserLogin().create(user)
+            rm = True if request.form.get('remainme') else False
+            login_user(userlogin, remember=rm)
+            return redirect(request.args.get('next') or url_for('profile'))
+
+        flash('Неверная пара логин/пароль', 'error')
+
+    return render_template('login.html', menu=fdb.get_menu(), title='Авторизация')
+
+
+@app.route('/register', methods=['POST', 'GET'])
+def register():
+    if request.method == 'POST':
+        print('HFEWUHFeuhwofehdkfspf')
+        if len(request.form['name']) > 2 and len(request.form['email']) > 4 \
+                and len(request.form['password']) > 5 and request.form['password'] == request.form['password2']:
+            hash = generate_password_hash(request.form['password'])
+            res = fdb.add_user(request.form['name'], request.form['email'], hash)
+            if res:
+                flash('Вы успешно зарегистрированы', 'success')
+                return redirect(url_for('login'))
+            else:
+                flash('Ошибка при добавлении в БД', 'error')
+        else:
+            flash('Неверно заполнены поля', 'error')
+    return render_template('register.html', menu=fdb.get_menu(), title='Регистрация')
 
 
 @app.errorhandler(404)
@@ -228,6 +279,20 @@ def hash_example():
     print(check_password_hash(hash, 'Password1'))
     return f'<h1>Hash: {hash}</h1>'
 
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Вы вышли из аккаунта', 'success')
+    return redirect(url_for('login'))
+
+
+@app.route('/profile')
+def profile():
+    # return f"""<p><a href="{url_for('logout')}">Выйти из профиля</a>
+    #             <p>user info: {current_user.get_id()}"""
+    return render_template('profile.html', user_id = current_user.get_id())
 
 if __name__ == '__main__':
     app.run(debug=True)
